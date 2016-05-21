@@ -99,7 +99,7 @@ class VRStatus {
     void updateTO(int needView, int needOperation) {
         state = State.RECOVERING;
         int i = idx;
-        while (operationNumber < needOperation || needView > viewNumber) {
+        while (operationNumber < needOperation || viewNumber < needView) {
             i = (i + 1) % amount;
             comm.sendGetState(viewNumber, operationNumber, idx, i);
             newState(comm.waitForType("newstate"));

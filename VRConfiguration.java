@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * Created by mariashka on 5/17/16.
  */
-public class VRConfiguration {
+class VRConfiguration {
     String[] address;
     InetSocketAddress[] inetAddresses;
     int n;

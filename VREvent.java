@@ -8,10 +8,10 @@ import java.util.List;
 /**
  * Created by mariashka on 5/18/16.
  */
-public class VREvent {
-    public String type;
-    public List<String> args;
-    public Socket socket;
+class VREvent {
+    String type;
+    List<String> args;
+    Socket socket;
 
     VREvent(List<String> strings, Socket s) {
         type = strings.get(0);
@@ -27,7 +27,7 @@ public class VREvent {
         return res;
     }
 
-    public void send() throws IOException {
+    void send() throws IOException {
         final PrintStream printStream = new PrintStream(socket.getOutputStream());
         printStream.print(toString());
     }

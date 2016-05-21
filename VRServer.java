@@ -10,6 +10,13 @@ class VRServer {
         int clientID = Integer.parseInt(event.args.get(1));
         int requestNumber = Integer.parseInt(event.args.get(2));
 
+        if (!S.isPrimary()) {
+            try {
+                event.socket.close();
+            } catch (IOException ignored) {}
+            return;
+        }
+
         if (!S.log.clientTable.containsKey(clientID))
             S.log.clientTable.put(clientID, 0);
         if (S.log.clientTable.get(clientID) > requestNumber)

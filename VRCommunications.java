@@ -3,10 +3,7 @@ package ru.ifmo;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.net.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -25,8 +22,11 @@ class VRCommunications {
         nodes = new Socket[amount];
         for (int i = 0; i < amount; i++) {
             nodes[i] = new Socket();
-            nodes[i].connect(new InetSocketAddress(InetAddress.getByName(conf.address[i]),
-                        conf.port[i]));
+            try {
+                nodes[i].connect(new InetSocketAddress(InetAddress.getByName(conf.address[i]), conf.port[i]), 100);
+            } catch (SocketTimeoutException e) {
+                nodes[i] = null;
+            }
         }
 
         final ServerSocket server = new ServerSocket(conf.port[idx], 100,
@@ -46,18 +46,21 @@ class VRCommunications {
         new Thread(() -> {
             while (true) {
                 VREvent event = output.poll();
+                if (event == null)
+                    continue;
                 try {
-                    if (event != null)
-                        event.send();
+                    event.send();
                 } catch (IOException e) {
                     if (event.idx == -1)
                         continue;
                     nodes[event.idx] = new Socket();
                     try {
-                        nodes[idx].connect(new InetSocketAddress(InetAddress.getByName(conf.address[idx]), conf.port[idx]));
-                        event.socket = nodes[idx];
-                        event.send();
-                    } catch (IOException ignored) {}
+                        nodes[event.idx].connect(new InetSocketAddress(
+                                InetAddress.getByName(conf.address[event.idx]), conf.port[event.idx]), 200);
+                    } catch (IOException ignored) {
+                        output.add(event);
+                    }
+                    event.socket = null;
                     output.add(event);
                 }
             }
@@ -76,7 +79,7 @@ class VRCommunications {
             }, 0, conf.timeout / 2);
     }
 
-    private static final Map<String , Integer> ARGS = new HashMap<>() {{
+    private static final Map<String , Integer> ARGS = new HashMap<String, Integer>() {{
         put("request", 4);
         put("prepare", 7);
         put("prepareOK", 4);

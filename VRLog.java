@@ -95,10 +95,12 @@ class VRLog {
                 i++;
             }
             int st1 = i;
+            i++;
             while (newLog.charAt(i) != '_') {
                 i++;
             }
             int st2 = i;
+            i++;
             while (newLog.charAt(i) != '_') {
                 i++;
             }

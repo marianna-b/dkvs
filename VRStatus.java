@@ -15,17 +15,14 @@ class VRStatus {
     int idx;
     VRLog log;
     int amount;
-    int timeout;
     VRCommunications comm;
 
-    Map<Integer, Integer> clientTable = new HashMap<>();
-    Map<Integer, String> clientResult = new HashMap<>();
     Map<Integer, VREvent> clients;
 
     Map<Integer, Integer> counter = new HashMap<>();
     Map<Integer, List<Integer> > prepared = new HashMap<>();
 
-    int operationNumber = 0;
+    int operationNumber;
     int commitNumber = 0;
     int viewNumber = 0;
     private State state = State.NORMAL;
@@ -37,6 +34,10 @@ class VRStatus {
 
     boolean isPrimary() {
         return (getPrimary() == idx);
+    }
+
+    private boolean isPrimary(int v) {
+        return (v % amount) == idx;
     }
 
     boolean accessPrimary() {
@@ -52,19 +53,20 @@ class VRStatus {
         return (state == State.RECOVERING);
     }
 
-    boolean isNormal() {
+    private boolean isNormal() {
         return (state == State.NORMAL);
     }
 
     private void replaceState(int v, String l, int n, int k) {
-        state = State.NORMAL;
         viewNumber = v;
-        log.replace(l, k);
+        commitNumber = 0;
+        log.replace(l);
+        commitToOperation(k);
         operationNumber = n;
         commitNumber = k;
         accessPrimary = true;
-        clientResult = new HashMap<>();
-        clientTable = new HashMap<>();
+        log.clientResult = new HashMap<>();
+        log.clientTable = new HashMap<>();
     }
 
     private void startView(VREvent event) {
@@ -105,30 +107,30 @@ class VRStatus {
         state = State.NORMAL;
     }
 
-    // TODO cleanup
-    private int change_view = 0;
-    private int change_view_old = 0;
-    private int change_operation = 0;
-    private int change_commit = 0;
-    private String change_log = "";
-
-
-    // TODO cleanup
     void startViewChange(VREvent event) {
         state = State.VIEWCHANGE;
         int[] list = new int[amount];
         int count = 0;
-        if (isPrimary()) {
+
+        int v = Integer.parseInt(event.args.get(0));
+
+        int changeView = 0;
+        int changeViewOld = 0;
+        int changeOperation = 0;
+        int changeCommit = 0;
+        String changeLog = "";
+
+        if (isPrimary(v)) {
             if (event.type.equals("doviewchange")) {
                 count++;
                 int i = Integer.parseInt(event.args.get(5));
                 list[i] = 1;
 
-                change_view  = Integer.parseInt(event.args.get(0));
-                change_log = event.args.get(1);
-                change_view_old  = Integer.parseInt(event.args.get(2));
-                change_operation  = Integer.parseInt(event.args.get(3));
-                change_commit  = Integer.parseInt(event.args.get(4));
+                changeView  = Integer.parseInt(event.args.get(0));
+                changeLog = event.args.get(1);
+                changeViewOld  = Integer.parseInt(event.args.get(2));
+                changeOperation  = Integer.parseInt(event.args.get(3));
+                changeCommit  = Integer.parseInt(event.args.get(4));
             }
 
         } else {
@@ -139,14 +141,11 @@ class VRStatus {
             }
         }
         while (count <= amount / 2) {
-            if (isPrimary()) {
+            if (isPrimary(v)) {
                 VREvent curr = comm.waitForType("doviewchange");
 
-                int v  = Integer.parseInt(curr.args.get(0));
-                String l = curr.args.get(1);
                 int v_old  = Integer.parseInt(curr.args.get(2));
                 int n  = Integer.parseInt(curr.args.get(3));
-                int k  = Integer.parseInt(curr.args.get(4));
                 int i  = Integer.parseInt(curr.args.get(5));
 
                 if (list[i] == 0) {
@@ -154,7 +153,18 @@ class VRStatus {
                     count++;
                 }
 
-                updateChangeVal(v, l, v_old, n, k);
+                if (v_old < changeViewOld)
+                    continue;
+
+                if (v_old == changeViewOld && n < changeOperation)
+                    continue;
+
+                changeOperation = n;
+                changeCommit = Integer.parseInt(curr.args.get(4));
+                changeViewOld = v_old;
+                changeView = Integer.parseInt(curr.args.get(0));
+                changeLog = curr.args.get(1);
+
             } else {
                 VREvent curr = comm.waitForType("startviewchange");
                 int i  = Integer.parseInt(curr.args.get(1));
@@ -164,8 +174,8 @@ class VRStatus {
                 }
             }
         }
-        if (isPrimary()) {
-            comm.sendStartView(change_view, change_log, change_operation, change_commit);
+        if (isPrimary(v)) {
+            comm.sendStartView(changeView, changeLog, changeOperation, changeCommit, idx);
         } else {
             int newView = Integer.parseInt(event.args.get(0));
             String logString = log.getLogAfter(-1);
@@ -177,18 +187,6 @@ class VRStatus {
         state = State.NORMAL;
     }
 
-    // TODO cleanup
-    private void updateChangeVal(int v, String l, int v_old, int n, int k) {
-        if (v_old < change_view_old)
-            return;
-        if (v_old == change_view_old && n < change_operation)
-            return;
-        change_operation = n;
-        change_commit = k;
-        change_view_old = v_old;
-        change_view = v;
-        change_log = l;
-    }
 
     boolean checkUpToDate(int needView, int needOperation) {
         return needView <= viewNumber && needOperation <= operationNumber;
@@ -244,10 +242,9 @@ class VRStatus {
 
     VRStatus(VRConfiguration conf, int x) throws IOException {
         comm = new VRCommunications(conf, x);
-        timeout = conf.timeout;
         amount = conf.n;
-        log = new VRLog();
+        log = new VRLog(x);
+        operationNumber = log.list.size();
         idx = x;
     }
-
 }

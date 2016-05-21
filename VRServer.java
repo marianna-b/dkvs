@@ -5,29 +5,26 @@ import java.io.IOException;
 class VRServer {
     private VRStatus S;
 
-
     private void request(VREvent event) {
         String operation = event.args.get(0);
         int clientID = Integer.parseInt(event.args.get(1));
         int requestNumber = Integer.parseInt(event.args.get(2));
 
-        if (!S.clientTable.containsKey(clientID))
-            S.clientTable.put(clientID, 0);
-        if (S.clientTable.get(clientID) > requestNumber)
+        if (!S.log.clientTable.containsKey(clientID))
+            S.log.clientTable.put(clientID, 0);
+        if (S.log.clientTable.get(clientID) > requestNumber)
             return;
-        if (S.clientTable.get(clientID) == requestNumber) {
-            if (S.clientResult.get(clientID) == null)
+        if (S.log.clientTable.get(clientID) == requestNumber) {
+            if (S.log.clientResult.get(clientID) == null)
                 return;
 
-            S.comm.replyToClient(clientID, event, S.viewNumber, S.clientResult.get(clientID));
+            S.comm.replyToClient(clientID, event, S.viewNumber, S.log.clientResult.get(clientID));
             return;
         }
 
         S.operationNumber++;
 
         S.clients.put(S.operationNumber, event);
-        S.clientTable.put(clientID, requestNumber);
-        S.clientResult.remove(clientID);
 
         S.addToLog(clientID, requestNumber, operation);
 
@@ -62,8 +59,6 @@ class VRServer {
 
         S.operationNumber++;
 
-        S.clientTable.put(clientID, requestNumber);
-        S.clientResult.remove(clientID);
         S.clients.put(S.operationNumber, event);
 
         S.addToLog(clientID, requestNumber, operation);
@@ -91,8 +86,6 @@ class VRServer {
         int i = Integer.parseInt(event.args.get(2));
 
         if (S.viewNumber != v)
-            return;
-        if (!S.isNormal()) // TODO check it is unnecessary to check
             return;
         S.comm.sendState(i, S.viewNumber, S.operationNumber, S.commitNumber, S.getLogAfter(n));
     }
@@ -180,10 +173,10 @@ class VRServer {
         VREvent event = S.clients.get(S.commitNumber + 1);
 
         int clientID = Integer.parseInt(event.args.get(1));
-        S.clientResult.put(clientID, res);
+        S.log.clientResult.put(clientID, res);
         S.commitNumber++;
 
-        S.comm.replyToClient(clientID, event, S.viewNumber, S.clientResult.get(clientID));
+        S.comm.replyToClient(clientID, event, S.viewNumber, S.log.clientResult.get(clientID));
     }
 
     private void main() {

@@ -24,6 +24,7 @@ class VRCommunications {
             nodes[i] = new Socket();
             try {
                 nodes[i].connect(new InetSocketAddress(InetAddress.getByName(conf.address[i]), conf.port[i]), 100);
+                sendNode(idx, i);
             } catch (SocketTimeoutException e) {
                 nodes[i] = null;
             }
@@ -48,18 +49,14 @@ class VRCommunications {
                 VREvent event = output.poll();
                 if (event == null)
                     continue;
+                if (event.socket == null) {
+                    if (event.idx == -1)
+                        continue;
+                    event.socket = nodes[event.idx];
+                }
                 try {
                     event.send();
                 } catch (IOException e) {
-                    if (event.idx == -1)
-                        continue;
-                    nodes[event.idx] = new Socket();
-                    try {
-                        nodes[event.idx].connect(new InetSocketAddress(
-                                InetAddress.getByName(conf.address[event.idx]), conf.port[event.idx]), 200);
-                    } catch (IOException ignored) {
-                        output.add(event);
-                    }
                     event.socket = null;
                     output.add(event);
                 }
@@ -91,6 +88,7 @@ class VRCommunications {
         put("doviewchange", 7);
         put("startview", 5);
         put("ping", 1);
+        put("node", 2);
     }};
 
     private void messageProcessing(final Socket socket) {
@@ -154,6 +152,13 @@ class VRCommunications {
         List<String> args = new ArrayList<>();
         args.add(Integer.toString(viewNumber));
         args.add(Integer.toString(operationNumber));
+        args.add(Integer.toString(idx));
+
+        output.add(new VREvent(args, nodes[nodeNumber], nodeNumber));
+    }
+
+    private void sendNode(int idx, int nodeNumber) {
+        List<String> args = new ArrayList<>();
         args.add(Integer.toString(idx));
 
         output.add(new VREvent(args, nodes[nodeNumber], nodeNumber));
@@ -244,6 +249,17 @@ class VRCommunications {
         for (int i = 0; i < nodes.length; i++) {
             if (i != idx)
                 output.add(new VREvent(args, nodes[i], i));
+        }
+    }
+
+    void reconnect(int i) {
+        nodes[i] = new Socket();
+        try {
+            nodes[i].connect(new InetSocketAddress(InetAddress.getByName(conf.address[i]), conf.port[i]), 100);
+        } catch (SocketTimeoutException e) {
+            nodes[i] = null;
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 }

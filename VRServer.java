@@ -134,6 +134,11 @@ class VRServer {
         S.startViewChange(event);
     }
 
+    private void node(VREvent event) {
+        int i = Integer.parseInt(event.args.get(0));
+        S.comm.reconnect(i);
+    }
+
     private void eventProcess(VREvent event) {
         switch (event.type) {
             case "request":
@@ -164,10 +169,12 @@ class VRServer {
             case "ping":
                 ping();
                 break;
+            case "node":
+                node(event);
+                break;
             default:
         }
     }
-
 
     private void checkAndCommit() {
         if (S.operationNumber == S.commitNumber)

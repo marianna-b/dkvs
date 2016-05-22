@@ -44,12 +44,6 @@ class VRLog {
         clientTable.put(clientID, requestNumber);
         clientResult.remove(clientID);
         list.add(new VRLogEntry(clientID, requestNumber, operation));
-
-        try( FileWriter fw = new FileWriter(fileName, true);
-             BufferedWriter bw = new BufferedWriter(fw);
-             PrintWriter out = new PrintWriter(bw)) {
-            out.println(list.get(list.size() - 1).string());
-        } catch (IOException ignored) {}
     }
 
     String invokeOperation(int i) {
@@ -86,6 +80,11 @@ class VRLog {
             default:
                 res = "PONG";
         }
+        try( FileWriter fw = new FileWriter(fileName, true);
+             BufferedWriter bw = new BufferedWriter(fw);
+             PrintWriter out = new PrintWriter(bw)) {
+            out.println(list.get(i).string());
+        } catch (IOException ignored) {}
         if (clientTable.get(list.get(i).clientID) == list.get(i).requestNumber)
             clientResult.put(list.get(i).clientID, res);
         return res;
@@ -119,13 +118,7 @@ class VRLog {
             int requestNumber = Integer.parseInt(newLog.substring(st1 + 1, st2));
             int len = Integer.parseInt(newLog.substring(st2 + 1, st3));
             String operation = newLog.substring(st3 + 1, st3 + len + 1);
-            if (!endlines)
-                addToLog(clientID, requestNumber, operation);
-            else {
-                clientTable.put(clientID, requestNumber);
-                clientResult.remove(clientID);
-                list.add(new VRLogEntry(clientID, requestNumber, operation));
-            }
+            addToLog(clientID, requestNumber, operation);
             i += len + 1;
             if (endlines)
                 i++;
@@ -138,5 +131,11 @@ class VRLog {
         clientResult = new HashMap<>();
         storage = new HashMap<>();
         appendLog(log);
+    }
+
+    void cutTo(int commitNumber) {
+        while (list.size() != commitNumber) {
+            list.remove(list.size() - 1);
+        }
     }
 }

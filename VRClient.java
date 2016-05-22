@@ -16,7 +16,7 @@ class VRClient {
         configuration = conf;
     }
 
-    private String request(String op) throws IOException {
+    private String request(String op) {
         requestNumber ++;
         while (true) {
             Socket client = new Socket();
@@ -46,7 +46,7 @@ class VRClient {
                 } catch (IOException e) {
                     viewNumber++;
                 }
-            } catch (SocketTimeoutException e) {
+            } catch (IOException e) {
                 viewNumber++;
             }
         }

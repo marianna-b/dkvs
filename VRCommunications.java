@@ -12,7 +12,7 @@ class VRCommunications {
     private AtomicReferenceArray<Socket> nodes;
     private ConcurrentLinkedQueue<VREvent> input = new ConcurrentLinkedQueue<>();
     private ConcurrentLinkedQueue<VREvent> output = new ConcurrentLinkedQueue<>();
-    private ConcurrentLinkedQueue<VREvent> delayed = new ConcurrentLinkedQueue<>();
+    private ArrayList <ConcurrentLinkedQueue<VREvent> > socketOut;
     private int amount;
     private VRConfiguration conf;
 
@@ -35,8 +35,33 @@ class VRCommunications {
         }).start();
 
         nodes = new AtomicReferenceArray<>(amount);
+        socketOut = new ArrayList<>();
+
         for (int i = 0; i < amount; i++) {
+            socketOut.add(new ConcurrentLinkedQueue<>());
             if (i != idx) {
+                int finalI1 = i;
+
+                new Thread(() -> {
+                    ConcurrentLinkedQueue<VREvent> q = socketOut.get(finalI1);
+                    VREvent event = q.poll();
+                    while (true) {
+                        if (event == null) {
+                            try {
+                                Thread.sleep(5);
+                            } catch (InterruptedException ignored) {}
+                            event = q.poll();
+                            continue;
+                        }
+                        event.socket = nodes.get(finalI1);
+                        try {
+                            event.send();
+                            event = q.poll();
+                        } catch (IOException ignored) {}
+                    }
+                }).start();
+
+
                 int finalI = i;
                 new Thread(() -> {
                     while (true) {
@@ -58,20 +83,20 @@ class VRCommunications {
 
         new Thread(() -> {
             while (true) {
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException ignored) {}
                 VREvent event = output.poll();
-                if (event == null)
+                if (event == null) {
                     continue;
-                if (event.socket == null) {
-                    if (event.idx == -1)
-                        continue;
-                    event.socket = nodes.get(event.idx);
+                }
+                if (event.idx != -1) {
+                    socketOut.get(event.idx).add(event);
+                    continue;
                 }
                 try {
                     event.send();
-                } catch (IOException e) {
-                    event.socket = null;
-                    output.add(event);
-                }
+                } catch (IOException e) {}
             }
         }).start();
 
@@ -83,9 +108,9 @@ class VRCommunications {
                 {
                     List<String> args = new ArrayList<>();
                     args.add("ping");
-                    input.add(new VREvent(args, null, -1));
+                    input.add(new VREvent(new ArrayList<>(args), null, -1));
                 }
-            }, 0, conf.timeout / 2);
+            }, 50, conf.timeout / 3);
     }
 
     private static final Map<String , Integer> ARGS = new HashMap<String, Integer>() {{
@@ -113,11 +138,11 @@ class VRCommunications {
                    int len = ARGS.get(lines.get(0));
                    if (lines.size() != len)
                        continue;
-                   for (int i = 0; i < len; i++) {
+                   /*for (int i = 0; i < len; i++) {
                         System.out.print(lines.get(i) + " ");
                    }
-                   System.out.println();
-                   input.add(new VREvent(lines.subList(0, len), socket, -1));
+                   System.out.println();*/
+                   input.add(new VREvent(new ArrayList<>(lines.subList(0, len)), socket, -1));
                    lines = lines.subList(len, lines.size());
                }
            } catch (IOException e) {
@@ -134,7 +159,7 @@ class VRCommunications {
         args.add(Integer.toString(viewNumber));
         args.add(Integer.toString(operationNumber));
         args.add(Integer.toString(idx));
-        output.add(new VREvent(args, nodes.get(primary), primary));
+        output.add(new VREvent(new ArrayList<>(args), nodes.get(primary), primary));
     }
 
     void sendStartView(int viewNumber, String log, int operationNumber, int commitNumber, int idx) {
@@ -149,7 +174,7 @@ class VRCommunications {
 
         for (int i = 0; i < amount; i++) {
             if (idx != i)
-                output.add(new VREvent(args, nodes.get(i), i));
+                output.add(new VREvent(new ArrayList<>(args), nodes.get(i), i));
         }
     }
 
@@ -167,20 +192,23 @@ class VRCommunications {
         args.add(Integer.toString(commitNumber));
         args.add(Integer.toString(idx));
 
-        output.add(new VREvent(args, nodes.get(primary), primary));
+        output.add(new VREvent(new ArrayList<>(args), nodes.get(primary), primary));
     }
 
-    void sendGetState(int viewNumber, int operationNumber, int idx, int nodeNumber) {
-        System.out.println("Send getView from " + Integer.toString(idx) + " to node " + Integer.toString(nodeNumber)
+    void sendGetState(int viewNumber, int operationNumber, int idx) {
+        System.out.println("Send getView from " + Integer.toString(idx) + " to nodes "
                 + " about operations after: " + Integer.toString(operationNumber));
         List<String> args = new ArrayList<>();
         args.add(Integer.toString(viewNumber));
         args.add(Integer.toString(operationNumber));
         args.add(Integer.toString(idx));
 
-        output.add(new VREvent(args, nodes.get(nodeNumber), nodeNumber));
+        for (int i = 0; i < amount; i++) {
+            if (idx != i)
+                output.add(new VREvent(new ArrayList<>(args), nodes.get(i), i));
+        }
     }
-
+    /*
     VREvent waitForType(String type) {
         System.out.println("Wait for " + type + " message");
         VREvent res;
@@ -191,12 +219,10 @@ class VRCommunications {
         System.out.println("Received!");
         return res;
     }
-
+    */
     VREvent getEvent() {
         while (true) {
-            VREvent event = delayed.poll();
-            if (event == null)
-                event = input.poll();
+            VREvent event = input.poll();
             if (event == null) {
                 try {
                     Thread.sleep(5);
@@ -216,7 +242,7 @@ class VRCommunications {
         args.add(Integer.toString(clientID));
         args.add(result);
 
-        output.add(new VREvent(args, event.socket, -1));
+        output.add(new VREvent(new ArrayList<>(args), event.socket, -1));
     }
 
     VREvent sendStartViewChange(int newViewNumber, int idx) {
@@ -232,7 +258,7 @@ class VRCommunications {
                 output.add(new VREvent(args, nodes.get(i), i));
         }
 
-        return new VREvent(args, nodes.get(idx), idx);
+        return new VREvent(new ArrayList<>(args), nodes.get(idx), idx);
     }
 
     void sendPrepare(String operation, int clientID, int requestNumber, int viewNumber, int operationNumber,
@@ -279,7 +305,7 @@ class VRCommunications {
 
         for (int i = 0; i < nodes.length(); i++) {
             if (i != idx)
-                output.add(new VREvent(args, nodes.get(i), i));
+                output.add(new VREvent(new ArrayList<>(args), nodes.get(i), i));
         }
     }
 }

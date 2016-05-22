@@ -9,9 +9,10 @@ class VRClient {
     private int requestNumber = 0;
     private VRConfiguration configuration;
 
-    private VRClient(VRConfiguration conf, int c) {
+    private VRClient(VRConfiguration conf, int c, int r) {
         clientID = c;
         viewNumber = 0;
+        requestNumber = r;
         configuration = conf;
     }
 
@@ -55,7 +56,7 @@ class VRClient {
         try {
             VRConfiguration configuration = new VRConfiguration("dkvs.properties");
 
-            VRClient client = new VRClient(configuration, Integer.parseInt(args[1]));
+            VRClient client = new VRClient(configuration, Integer.parseInt(args[0]), Integer.parseInt(args[1]));
             BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
             String line;
             try {

@@ -10,7 +10,11 @@ class VRServer {
         int clientID = Integer.parseInt(event.args.get(1));
         int requestNumber = Integer.parseInt(event.args.get(2));
 
+        System.out.println("Received request clientID: " + Integer.toString(clientID) + " reqNum: " +
+                Integer.toString(requestNumber) + " operation: " + operation);
+
         if (!S.isPrimary()) {
+            System.out.println("Because not primary close connection");
             try {
                 event.socket.close();
             } catch (IOException ignored) {}
@@ -22,11 +26,13 @@ class VRServer {
         if (S.log.clientTable.get(clientID) > requestNumber)
             return;
         if (S.log.clientTable.get(clientID) == requestNumber) {
-            if (S.log.clientResult.get(clientID) == null)
+            System.out.println("Resend result");
+            if (S.log.clientResult.get(clientID) != null) {
+                S.comm.replyToClient(clientID, event, S.viewNumber, S.log.clientResult.get(clientID));
                 return;
-
-            S.comm.replyToClient(clientID, event, S.viewNumber, S.log.clientResult.get(clientID));
-            return;
+            } else {
+                return;
+            }
         }
 
         S.operationNumber++;
@@ -47,17 +53,26 @@ class VRServer {
         int clientID = Integer.parseInt(event.args.get(3));
         int requestNumber = Integer.parseInt(event.args.get(4));
 
-        if (S.isBehind(v, n - 1))
+        System.out.println("Received prepare for view: " + Integer.toString(v) + " operation: " + Integer.toString(n) +
+                            " operation: " + operation);
+
+        if (S.isBehind(v, n - 1)) {
+            System.out.println("Drop because too old");
             return;
+        }
 
         if (!S.checkUpToDate(v, n - 1))
             S.updateTO(v, n - 1);
 
-        if (S.isBehind(v, n - 1))
+        if (S.isBehind(v, n - 1)) {
+            System.out.println("Drop because too old");
             return;
+        }
 
-        if (S.isPrimary())
+        if (S.isPrimary()) {
+            System.out.println("Drop because primary doesn't prepare");
             return;
+        }
 
         if (S.commitNumber < k)
             S.commitToOperation(k);
@@ -78,6 +93,9 @@ class VRServer {
         int n = Integer.parseInt(event.args.get(1));
         int i = Integer.parseInt(event.args.get(2));
 
+        System.out.println("Received prepareOK for view: " + Integer.toString(v) + " operation: " + Integer.toString(n)
+                + " from: " + Integer.toString(i));
+
         if (!S.checkUpToDate(v, n)) {
             S.updateTO(v, n);
             return;
@@ -92,8 +110,12 @@ class VRServer {
         int n = Integer.parseInt(event.args.get(1));
         int i = Integer.parseInt(event.args.get(2));
 
-        if (S.viewNumber != v)
+        System.out.println("Received getState for view: " + Integer.toString(v));
+
+        if (S.viewNumber != v) {
+            System.out.println("Drop because not same view");
             return;
+        }
         S.comm.sendState(i, S.viewNumber, S.operationNumber, S.commitNumber, S.getLogAfter(n));
     }
 
@@ -101,14 +123,20 @@ class VRServer {
         int v = Integer.parseInt(event.args.get(0));
         int k = Integer.parseInt(event.args.get(1));
 
-        if (S.isBehind(v, k))
+        System.out.println("Received commit for view: " + Integer.toString(v) + " to commit to: " + Integer.toString(k));
+
+        if (S.isBehind(v, k)) {
+            System.out.println("Drop because too old");
             return;
+        }
 
         if (!S.checkUpToDate(v, k))
             S.updateTO(v, k);
 
-        if (S.isBehind(v, k))
+        if (S.isBehind(v, k)) {
+            System.out.println("Drop because too old");
             return;
+        }
 
         S.accessPrimary = true;
         S.commitToOperation(k);
@@ -121,22 +149,28 @@ class VRServer {
         }
         if (S.accessPrimary())
             return;
-
+        System.out.println("Timeout expired for primary, send startViewChange to all");
         VREvent self = S.comm.sendStartViewChange(S.viewNumber + 1, S.idx);
         viewChange(self);
     }
 
     private void viewChange(VREvent event) {
         int v = Integer.parseInt(event.args.get(0));
-        if (S.viewNumber >= v)
+        System.out.println("Received changeView to view: " + Integer.toString(v));
+        if (S.viewNumber >= v) {
+            System.out.println("Drop because too old");
             return;
+        }
         S.comm.sendStartViewChange(v, S.idx);
         S.startViewChange(event);
     }
 
-    private void node(VREvent event) {
-        int i = Integer.parseInt(event.args.get(0));
-        S.comm.reconnect(i);
+    private void startView(VREvent event) {
+        int v = Integer.parseInt(event.args.get(0));
+        int n = Integer.parseInt(event.args.get(2));
+
+        System.out.println("Received startView with view: " + Integer.toString(v) + " opNum: " + Integer.toString(n));
+        S.startView(event);
     }
 
     private void eventProcess(VREvent event) {
@@ -151,6 +185,7 @@ class VRServer {
                 prepareOK(event);
                 break;
             case "startview":
+                startView(event);
                 break;
             case "doviewchange":
                 viewChange(event);
@@ -169,18 +204,19 @@ class VRServer {
             case "ping":
                 ping();
                 break;
-            case "node":
-                node(event);
-                break;
             default:
         }
     }
 
     private void checkAndCommit() {
+        System.out.println("Check if can commit");
         if (S.operationNumber == S.commitNumber)
+            return;
+        if (!S.counter.containsKey(S.commitNumber + 1))
             return;
         if (S.counter.get(S.commitNumber + 1) < S.amount / 2)
             return;
+        System.out.println("Can commit operation " + Integer.toString(S.commitNumber + 1));
         S.counter.remove(S.commitNumber + 1);
         S.prepared.remove(S.commitNumber + 1);
         String res = S.log.invokeOperation(S.commitNumber + 1);

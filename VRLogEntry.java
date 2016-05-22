@@ -1,8 +1,8 @@
 package ru.ifmo;
 
 class VRLogEntry {
-    private int clientID;
-    private int requestNumber;
+    int clientID;
+    int requestNumber;
     String operation;
 
 

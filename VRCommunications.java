@@ -6,7 +6,6 @@ import java.io.InputStreamReader;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 class VRCommunications {
@@ -44,12 +43,12 @@ class VRCommunications {
                         Socket curr = new Socket();
                         try {
                             curr.connect(new InetSocketAddress(InetAddress.getByName(conf.address[finalI]), conf.port[finalI]), 100);
-                        } catch (SocketTimeoutException e) {} catch (IOException e) {}
+                        } catch (IOException ignored) {}
                         nodes.set(finalI, curr);
                         while (nodes.get(finalI).isConnected()) {
                             try {
                                 Thread.sleep(10);
-                            } catch (InterruptedException e) {}
+                            } catch (InterruptedException ignored) {}
                         }
                     }
 
@@ -101,7 +100,6 @@ class VRCommunications {
         put("doviewchange", 7);
         put("startview", 5);
         put("ping", 1);
-        put("node", 2);
     }};
 
     private void messageProcessing(final Socket socket) {
@@ -129,6 +127,8 @@ class VRCommunications {
    }
 
     void sendPrepareOK(int viewNumber, int operationNumber, int idx, int primary) {
+        System.out.println("Send prepareOK from " + Integer.toString(idx) + " to primary " + Integer.toString(primary) +
+        " about " + Integer.toString(operationNumber) + " view: " + Integer.toString(viewNumber));
         List<String> args = new ArrayList<>();
         args.add("prepareOK");
         args.add(Integer.toString(viewNumber));
@@ -138,6 +138,8 @@ class VRCommunications {
     }
 
     void sendStartView(int viewNumber, String log, int operationNumber, int commitNumber, int idx) {
+        System.out.println("Send startView from " + Integer.toString(idx) + " to all about "
+                + Integer.toString(operationNumber) + " view: " + Integer.toString(viewNumber));
         List<String> args = new ArrayList<>();
         args.add("startview");
         args.add(Integer.toString(viewNumber));
@@ -153,6 +155,9 @@ class VRCommunications {
 
     void sendDoViewChange(int newViewNumber, String log, int oldViewNumber, int operationNumber, int commitNumber,
                           int idx, int primary) {
+        System.out.println("Send doViewChange from " + Integer.toString(idx) + " to primary " + Integer.toString(primary)
+                + " about newView: " + Integer.toString(newViewNumber) + " oldView: " + Integer.toString(oldViewNumber));
+
         List<String> args = new ArrayList<>();
         args.add("doviewchange");
         args.add(Integer.toString(newViewNumber));
@@ -166,6 +171,8 @@ class VRCommunications {
     }
 
     void sendGetState(int viewNumber, int operationNumber, int idx, int nodeNumber) {
+        System.out.println("Send getView from " + Integer.toString(idx) + " to node " + Integer.toString(nodeNumber)
+                + " about operations after: " + Integer.toString(operationNumber));
         List<String> args = new ArrayList<>();
         args.add(Integer.toString(viewNumber));
         args.add(Integer.toString(operationNumber));
@@ -174,19 +181,14 @@ class VRCommunications {
         output.add(new VREvent(args, nodes.get(nodeNumber), nodeNumber));
     }
 
-    private void sendNode(int idx, int nodeNumber) {
-        List<String> args = new ArrayList<>();
-        args.add(Integer.toString(idx));
-
-        output.add(new VREvent(args, nodes.get(nodeNumber), nodeNumber));
-    }
-
     VREvent waitForType(String type) {
+        System.out.println("Wait for " + type + " message");
         VREvent res;
         while ((res = input.poll()) == null || !res.type.equals(type)) {
             if (res != null)
                 delayed.add(res);
         }
+        System.out.println("Received!");
         return res;
     }
 
@@ -206,6 +208,8 @@ class VRCommunications {
     }
 
     void replyToClient(int clientID, VREvent event, int viewNumber, String result) {
+        System.out.println("Send reply to clientID " + Integer.toString(clientID) + " with " + result);
+
         List<String> args = new ArrayList<>();
         args.add("reply");
         args.add(Integer.toString(viewNumber));
@@ -216,6 +220,8 @@ class VRCommunications {
     }
 
     VREvent sendStartViewChange(int newViewNumber, int idx) {
+        System.out.println("Send startViewCHange from " + Integer.toString(idx) + " to all with view: "
+                + Integer.toString(newViewNumber));
         List<String> args = new ArrayList<>();
         args.add("startviewchange");
         args.add(Integer.toString(newViewNumber));
@@ -231,6 +237,10 @@ class VRCommunications {
 
     void sendPrepare(String operation, int clientID, int requestNumber, int viewNumber, int operationNumber,
                      int commitNumber, int idx) {
+        System.out.println("Send prepare from primary " + Integer.toString(idx) + " to all with clientID: "
+                + Integer.toString(clientID) + " reqNum: " + Integer.toString(requestNumber) + " operation: " + operation +
+                Integer.toString(requestNumber) + " commNum: " + Integer.toString(commitNumber) +
+                " view: " + Integer.toString(viewNumber) + " opNum: " + Integer.toString(operationNumber));
         List<String> args = new ArrayList<>();
         args.add("prepare");
         args.add(Integer.toString(viewNumber));
@@ -247,6 +257,9 @@ class VRCommunications {
     }
 
     void sendState(int idx, int viewNumber, int operationNumber, int commitNumber, String log) {
+        System.out.println("Sending current state to " + Integer.toString(idx) + " with" +
+        " view: " + Integer.toString(viewNumber) + " opNum: " + Integer.toString(operationNumber) +
+        " comNum: " + Integer.toString(commitNumber));
         List<String> args = new ArrayList<>();
         args.add("newstate");
         args.add(Integer.toString(viewNumber));
@@ -258,6 +271,7 @@ class VRCommunications {
     }
 
     void sendCommit(int viewNumber, int commitNumber, int idx) {
+        System.out.println("Send commit from " + Integer.toString(idx) + " with commNum " + Integer.toString(commitNumber));
         List<String> args = new ArrayList<>();
         args.add("commit");
         args.add(Integer.toString(viewNumber));
@@ -266,17 +280,6 @@ class VRCommunications {
         for (int i = 0; i < nodes.length(); i++) {
             if (i != idx)
                 output.add(new VREvent(args, nodes.get(i), i));
-        }
-    }
-
-    void reconnect(int i) {
-        nodes[i] = new Socket();
-        try {
-            nodes[i].connect(new InetSocketAddress(InetAddress.getByName(conf.address[i]), conf.port[i]), 100);
-        } catch (SocketTimeoutException e) {
-            nodes[i] = null;
-        } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 }

@@ -16,7 +16,9 @@ class VRLog {
 
     VRLog(int i) {
         idx = i;
-        String fileName = "dkvs" + Integer.toString(idx + 1) + ".log";
+        fileName = "dkvs" + Integer.toString(idx + 1) + ".log";
+        clientTable = new HashMap<>();
+        clientResult = new HashMap<>();
 
 
         try( FileReader fr = new FileReader(fileName);
@@ -51,16 +53,18 @@ class VRLog {
     }
 
     String invokeOperation(int i) {
+        i--;
         String op = list.get(i).operation;
         String key;
-
+        String res;
         switch (op.substring(0, 3)) {
             case "get":
                 key = op.substring(4);
                 if (storage.containsKey(key))
-                    return "VALUE " + key + " " + storage.get(key);
+                    res = "VALUE " + key + " " + storage.get(key);
                 else
-                    return "NOT_FOUND";
+                    res = "NOT_FOUND";
+                break;
             case "set":
                 String arg = op.substring(4);
                 int j = 0;
@@ -68,18 +72,23 @@ class VRLog {
                     j++;
                 }
                 storage.put(arg.substring(0, j), arg.substring(j + 1));
-                return "STORED";
+                res = "STORED";
+                break;
             case "del":
                 key = op.substring(7);
                 if (storage.containsKey(key)) {
                     storage.remove(key);
-                    return "DELETED";
+                    res = "DELETED";
                 } else {
-                    return "NOT_FOUND";
+                    res = "NOT_FOUND";
                 }
+                break;
             default:
-                return "PONG";
+                res = "PONG";
         }
+        if (clientTable.get(list.get(i).clientID) == list.get(i).requestNumber)
+            clientResult.put(list.get(i).clientID, res);
+        return res;
     }
 
 
@@ -110,7 +119,13 @@ class VRLog {
             int requestNumber = Integer.parseInt(newLog.substring(st1 + 1, st2));
             int len = Integer.parseInt(newLog.substring(st2 + 1, st3));
             String operation = newLog.substring(st3 + 1, st3 + len + 1);
-            addToLog(clientID, requestNumber, operation);
+            if (!endlines)
+                addToLog(clientID, requestNumber, operation);
+            else {
+                clientTable.put(clientID, requestNumber);
+                clientResult.remove(clientID);
+                list.add(new VRLogEntry(clientID, requestNumber, operation));
+            }
             i += len + 1;
             if (endlines)
                 i++;

@@ -173,8 +173,10 @@ class VRServer {
 
             case "newstate":
                 newState(event);
-                if (S.viewNumber == view || S.operationNumber == op)
+                if (S.viewNumber == view || S.operationNumber == op) {
+                    S.state = VRStatus.State.NORMAL;
                     return 1;
+                }
                 return 0;
 
             case "getstate":
@@ -208,8 +210,12 @@ class VRServer {
         S.comm.sendGetState(view, op, S.idx);
         while (true) {
             int res = recover(S.comm.getEvent(), view, op);
-            if (res == 1)
+            if (res == 1) {
+                for (int i = S.commitNumber + 1; i <= S.operationNumber; i++) {
+                    S.comm.sendPrepareOK(S.viewNumber, i, S.idx, S.getPrimary());
+                }
                 return true;
+            }
             if (res == -1)
                 return false;
         }
@@ -217,7 +223,9 @@ class VRServer {
 
     private void startView(VREvent event) {
         int v = Integer.parseInt(event.args.get(0));
+        String l = event.args.get(1);
         int n = Integer.parseInt(event.args.get(2));
+        int k = Integer.parseInt(event.args.get(3));
 
         System.out.println("Received startView with view: " + Integer.toString(v) + " opNum: " + Integer.toString(n));
         if (S.isBehind(v, n)) {
@@ -227,7 +235,11 @@ class VRServer {
         S.resetAccessPrimary();
         System.out.println("Back to normal");
         S.state = VRStatus.State.NORMAL;
-        S.startView(event);
+
+        S.replaceState(v, l, n, k);
+        for (int i = S.commitNumber + 1; i <= S.operationNumber; i++) {
+            S.comm.sendPrepareOK(S.viewNumber, i, S.idx, S.getPrimary());
+        }
     }
 
     private void ping() {
@@ -247,17 +259,11 @@ class VRServer {
             System.out.println("Timeout expired for primary, send startViewChange to all");
             S.setChange(S.viewNumber + 1, S.getLogAfter(-1), S.viewNumber, S.operationNumber, S.commitNumber);
             S.state = VRStatus.State.VIEWCHANGE;
-            S.notWaitPrimary = true;
             S.comm.sendStartViewChange(S.viewNumber + 1, S.idx);
         } else {
-            /*
-            if (S.notWaitPrimary)
-                return;
-                */
             System.out.println("Timeout expired for new primary, send startViewChange to all");
             S.setChange(S.changeView + 1, S.getLogAfter(-1), S.viewNumber, S.operationNumber, S.commitNumber);
             S.state = VRStatus.State.VIEWCHANGE;
-            S.notWaitPrimary = true;
             S.comm.sendStartViewChange(S.viewNumber + 1, S.idx);
         }
     }
@@ -269,7 +275,9 @@ class VRServer {
             return;
         }
         int v = Integer.parseInt(event.args.get(0));
+        String l = event.args.get(1);
         int n = Integer.parseInt(event.args.get(2));
+        int k = Integer.parseInt(event.args.get(3));
 
         if (S.isBehind(v, n)) {
             System.out.println("Drop because too old");
@@ -277,7 +285,7 @@ class VRServer {
         }
 
        if (S.isRecovering()) {
-           S.newState(event);
+           S.updateWith(l, v, n, k);
        }
     }
 
@@ -292,13 +300,12 @@ class VRServer {
         }
 
         // TODO is ok?
-        if (v % S.amount == i)
+        //if (v % S.amount == i)
             S.resetAccessPrimary();
 
         if (S.isNormal() || S.isRecovering()) {
             S.setChange(v, S.getLogAfter(-1), S.viewNumber, S.operationNumber, S.commitNumber);
             S.state = VRStatus.State.VIEWCHANGE;
-            S.notWaitPrimary = true;
 
             S.comm.sendStartViewChange(v, S.idx);
         }
@@ -324,7 +331,6 @@ class VRServer {
             return;
         }
         S.comm.sendDoViewChange(S.changeView, logString, S.viewNumber, S.operationNumber, S.commitNumber, S.idx, newPrimary);
-        S.notWaitPrimary = false;
         S.resetAccessPrimary();
     }
 
@@ -343,14 +349,13 @@ class VRServer {
         }
 
         // TODO is ok?
-        if (v % S.amount == i)
+        //if (v % S.amount == i)
             S.resetAccessPrimary();
 
         if (S.isNormal() || S.isRecovering()) {
             S.state = VRStatus.State.VIEWCHANGE;
             S.setChange(v, S.getLogAfter(-1), S.viewNumber, S.operationNumber, S.commitNumber);
             S.updateChange(v, l, v_old, n, k);
-            S.notWaitPrimary = true;
 
             S.counterDoViewChange++;
             S.doViewChangeList.set(i, 1);

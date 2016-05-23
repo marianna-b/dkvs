@@ -11,7 +11,6 @@ class VRStatus {
     int counterStartViewChange;
     List<Integer> doViewChangeList;
     int counterDoViewChange;
-    public boolean notWaitPrimary = false;
 
     void restartChange(int view) {
 
@@ -68,10 +67,10 @@ class VRStatus {
     int commitNumber = 0;
     int viewNumber = 0;
     State state = State.NORMAL;
-    int accessPrimary = 10;
+    private int accessPrimary = 10;
 
     int changeView = 0;
-    int changeViewOld = 0;
+    private int changeViewOld = 0;
     int changeOperation = 0;
     int changeCommit = 0;
     String changeLog = "";
@@ -126,54 +125,6 @@ class VRStatus {
         log.clientTable = new HashMap<>();
     }
 
-    void startView(VREvent event) {
-        System.out.println(event.args.size());
-        int v = Integer.parseInt(event.args.get(0));
-        String l = event.args.get(1);
-        int n = Integer.parseInt(event.args.get(2));
-        int k = Integer.parseInt(event.args.get(3));
-
-        if (isBehind(v, n)) {
-            System.out.println("Drop because too old");
-            return;
-        }
-
-        replaceState(v, l, n, k);
-        for (int i = commitNumber + 1; i <= operationNumber; i++) {
-            comm.sendPrepareOK(viewNumber, i, idx, getPrimary());
-        }
-    }
-
-    void newState(VREvent event) {
-        System.out.println("Getting new state");
-        int v = Integer.parseInt(event.args.get(0));
-        String l = event.args.get(1);
-        int n = Integer.parseInt(event.args.get(2));
-        int k = Integer.parseInt(event.args.get(3));
-
-        if (isBehind(v, n)) {
-            System.out.println("Drop because too old");
-            return;
-        }
-
-        if (isRecovering())
-            updateWith(l, v, n, k);
-    }
-    /*
-    void updateTO(int needView, int needOperation) {
-        System.out.println("Start recovering to view: " + Integer.toString(needView) + " opNum " + Integer.toString(needOperation));
-        state = State.RECOVERING;
-        int i = idx;
-        while (operationNumber < needOperation || viewNumber < needView) {
-            i = (i + 1) % amount;
-            comm.sendGetState(viewNumber, operationNumber, idx, i);
-            newState(comm.waitForType("newstate"));
-        }
-        state = State.NORMAL;
-    }
-    */
-
-
     boolean checkUpToDate(int needView, int needOperation) {
         return needView <= viewNumber && needOperation <= operationNumber;
     }
@@ -182,12 +133,11 @@ class VRStatus {
         return msgViewNumber < viewNumber || msgOperationNumber < operationNumber;
     }
 
-    private void updateWith(String newLog, int newView, int newOpNumber, int newCommitNumber) {
+    void updateWith(String newLog, int newView, int newOpNumber, int newCommitNumber) {
         log.appendLog(newLog);
         viewNumber = newView;
         operationNumber = newOpNumber;
         commitToOperation(newCommitNumber);
-        state = State.NORMAL;
     }
 
     void commitToOperation(int newCommitNumber) {

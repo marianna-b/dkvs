@@ -264,7 +264,7 @@ class VRServer {
             System.out.println("Timeout expired for new primary, send startViewChange to all");
             S.setChange(S.changeView + 1, S.getLogAfter(-1), S.viewNumber, S.operationNumber, S.commitNumber);
             S.state = VRStatus.State.VIEWCHANGE;
-            S.comm.sendStartViewChange(S.viewNumber + 1, S.idx);
+            S.comm.sendStartViewChange(S.changeView + 1, S.idx);
         }
     }
 
@@ -300,18 +300,18 @@ class VRServer {
         }
 
         // TODO is ok?
-        //if (v % S.amount == i)
+        if (v % S.amount == i)
             S.resetAccessPrimary();
 
         if (S.isNormal() || S.isRecovering()) {
             S.setChange(v, S.getLogAfter(-1), S.viewNumber, S.operationNumber, S.commitNumber);
             S.state = VRStatus.State.VIEWCHANGE;
-
             S.comm.sendStartViewChange(v, S.idx);
         }
 
         if (S.changeView < v) {
             S.restartChange(v);
+            S.comm.sendStartViewChange(v, S.idx);
         }
 
         if (S.startViewChangeList.get(i) != 0)
@@ -349,7 +349,7 @@ class VRServer {
         }
 
         // TODO is ok?
-        //if (v % S.amount == i)
+        if (v % S.amount == i)
             S.resetAccessPrimary();
 
         if (S.isNormal() || S.isRecovering()) {
@@ -364,8 +364,10 @@ class VRServer {
         }
         if (v > S.changeView)
             S.setChange(v, l, v_old, n, k);
-        else
+        else {
             S.updateChange(v, l, v_old, n, k);
+            S.comm.sendStartViewChange(v, S.idx);
+        }
 
         if (S.doViewChangeList.get(i) != 0)
             return;
@@ -378,8 +380,8 @@ class VRServer {
 
         if (S.isPrimary(S.changeView)) {
             S.replaceState(S.changeView, S.changeLog, S.changeOperation, S.changeCommit);
-            if (S.idx == 1)
-                return;
+            /*if (S.idx == 1)
+                return;*/
             S.comm.sendStartView(S.changeView, S.changeLog, S.changeOperation, S.changeCommit, S.idx);
             S.state = VRStatus.State.NORMAL;
             System.out.println("Back to Normal");

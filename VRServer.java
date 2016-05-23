@@ -52,8 +52,8 @@ class VRServer {
         String operation = event.args.get(1);
         int n = Integer.parseInt(event.args.get(2));
         int k = Integer.parseInt(event.args.get(3));
-        int clientID = Integer.parseInt(event.args.get(3));
-        int requestNumber = Integer.parseInt(event.args.get(4));
+        int clientID = Integer.parseInt(event.args.get(4));
+        int requestNumber = Integer.parseInt(event.args.get(5));
 
         System.out.println("Received prepare for view: " + Integer.toString(v) + " operation: " + Integer.toString(n) +
                     " operation: " + operation);
@@ -102,19 +102,22 @@ class VRServer {
     }
 
     private void getState(VREvent event) {
-        if (!S.isNormal())
-            return;
+
         int v = Integer.parseInt(event.args.get(0));
         int n = Integer.parseInt(event.args.get(1));
         int i = Integer.parseInt(event.args.get(2));
 
         System.out.println("Received getState for view: " + Integer.toString(v));
+        if (!S.isNormal()) {
+            System.out.println("Drop because not normal");
+            return;
+        }
 
         if (S.viewNumber != v) {
             System.out.println("Drop because not same view");
             return;
         }
-        S.comm.sendState(i, S.viewNumber, S.operationNumber, S.commitNumber, S.getLogAfter(n));
+        S.comm.sendState(i, S.viewNumber, S.operationNumber, S.commitNumber, S.getLogAfter(n - 1));
     }
 
     private void commit(VREvent event) {
@@ -244,15 +247,23 @@ class VRServer {
             System.out.println("Timeout expired for primary, send startViewChange to all");
             S.setChange(S.viewNumber + 1, S.getLogAfter(-1), S.viewNumber, S.operationNumber, S.commitNumber);
             S.state = VRStatus.State.VIEWCHANGE;
+            S.notWaitPrimary = true;
             S.comm.sendStartViewChange(S.viewNumber + 1, S.idx);
         } else {
-            //if ()
-            //VREvent self = S.comm.sendStartViewChange(S.changeView + 1, S.idx);
-            //startViewChange(self);
+            /*
+            if (S.notWaitPrimary)
+                return;
+                */
+            System.out.println("Timeout expired for new primary, send startViewChange to all");
+            S.setChange(S.changeView + 1, S.getLogAfter(-1), S.viewNumber, S.operationNumber, S.commitNumber);
+            S.state = VRStatus.State.VIEWCHANGE;
+            S.notWaitPrimary = true;
+            S.comm.sendStartViewChange(S.viewNumber + 1, S.idx);
         }
     }
 
     private void newState(VREvent event) {
+        System.out.println("Got new state");
         if (!S.isRecovering()) {
             System.out.println("Drop because not recovering");
             return;
@@ -287,6 +298,7 @@ class VRServer {
         if (S.isNormal() || S.isRecovering()) {
             S.setChange(v, S.getLogAfter(-1), S.viewNumber, S.operationNumber, S.commitNumber);
             S.state = VRStatus.State.VIEWCHANGE;
+            S.notWaitPrimary = true;
 
             S.comm.sendStartViewChange(v, S.idx);
         }
@@ -312,6 +324,8 @@ class VRServer {
             return;
         }
         S.comm.sendDoViewChange(S.changeView, logString, S.viewNumber, S.operationNumber, S.commitNumber, S.idx, newPrimary);
+        S.notWaitPrimary = false;
+        S.resetAccessPrimary();
     }
 
     private void doViewChange(VREvent event) {
@@ -336,6 +350,7 @@ class VRServer {
             S.state = VRStatus.State.VIEWCHANGE;
             S.setChange(v, S.getLogAfter(-1), S.viewNumber, S.operationNumber, S.commitNumber);
             S.updateChange(v, l, v_old, n, k);
+            S.notWaitPrimary = true;
 
             S.counterDoViewChange++;
             S.doViewChangeList.set(i, 1);
@@ -358,6 +373,8 @@ class VRServer {
 
         if (S.isPrimary(S.changeView)) {
             S.replaceState(S.changeView, S.changeLog, S.changeOperation, S.changeCommit);
+            if (S.idx == 1)
+                return;
             S.comm.sendStartView(S.changeView, S.changeLog, S.changeOperation, S.changeCommit, S.idx);
             S.state = VRStatus.State.NORMAL;
             System.out.println("Back to Normal");

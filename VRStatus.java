@@ -11,6 +11,7 @@ class VRStatus {
     int counterStartViewChange;
     List<Integer> doViewChangeList;
     int counterDoViewChange;
+    public boolean notWaitPrimary = false;
 
     void restartChange(int view) {
 

@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
@@ -13,6 +14,7 @@ class VRCommunications {
     private ConcurrentLinkedQueue<VREvent> input = new ConcurrentLinkedQueue<>();
     private ConcurrentLinkedQueue<VREvent> output = new ConcurrentLinkedQueue<>();
     private ArrayList <ConcurrentLinkedQueue<VREvent> > socketOut;
+    private ConcurrentHashMap<SocketAddress, List<String> > lists = new ConcurrentHashMap<>();
     private int amount;
     private VRConfiguration conf;
 
@@ -27,6 +29,9 @@ class VRCommunications {
             while (true) {
                 try {
                     Socket socket = server.accept();
+                    SocketAddress addr = socket.getRemoteSocketAddress();
+                    if (!lists.containsKey(addr))
+                        lists.put(addr, new ArrayList<>());
                     messageProcessing(socket);
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -39,6 +44,7 @@ class VRCommunications {
 
         for (int i = 0; i < amount; i++) {
             socketOut.add(new ConcurrentLinkedQueue<>());
+            nodes.set(i, new Socket());
             if (i != idx) {
                 int finalI1 = i;
 
@@ -53,11 +59,19 @@ class VRCommunications {
                             event = q.poll();
                             continue;
                         }
-                        event.socket = nodes.get(finalI1);
                         try {
                             event.send();
                             event = q.poll();
-                        } catch (IOException ignored) {}
+                        } catch (IOException ignored) {
+                            try {
+                                Thread.sleep(115);
+                            } catch (InterruptedException ign) {}
+                            event.socket = nodes.get(finalI1);
+                            try {
+                                event.send();
+                            } catch (IOException ign2) {}
+                            event = q.poll();
+                        }
                     }
                 }).start();
 
@@ -65,18 +79,17 @@ class VRCommunications {
                 int finalI = i;
                 new Thread(() -> {
                     while (true) {
-                        Socket curr = new Socket();
                         try {
-                            curr.connect(new InetSocketAddress(InetAddress.getByName(conf.address[finalI]), conf.port[finalI]), 100);
+                            Socket tmp = nodes.getAndSet(finalI, new Socket());
+                            if (tmp != null)
+                                tmp.close();
+                            nodes.get(finalI).connect(new InetSocketAddress(InetAddress.getByName(conf.address[finalI1]),
+                                    conf.port[finalI1]), 50);
                         } catch (IOException ignored) {}
-                        nodes.set(finalI, curr);
-                        while (nodes.get(finalI).isConnected()) {
-                            try {
-                                Thread.sleep(10);
-                            } catch (InterruptedException ignored) {}
-                        }
+                        try {
+                            Thread.sleep(10);
+                        } catch (InterruptedException ignored) {}
                     }
-
                 }).start();
             }
         }
@@ -113,7 +126,7 @@ class VRCommunications {
             }, 50, conf.timeout / 3);
     }
 
-    private static final Map<String , Integer> ARGS = new HashMap<String, Integer>() {{
+    private static final ConcurrentHashMap<String , Integer> ARGS = new ConcurrentHashMap<String, Integer>() {{
         put("request", 4);
         put("prepare", 7);
         put("prepareOK", 4);
@@ -132,16 +145,23 @@ class VRCommunications {
            try {
                BufferedReader r = new BufferedReader(new InputStreamReader(socket.getInputStream()), 100);
                String line;
-               List<String> lines = new ArrayList<>();
+               List<String> lines = lists.get(socket.getRemoteSocketAddress());
                while ((line = r.readLine()) != null) {
                    lines.add(line);
-                   int len = ARGS.get(lines.get(0));
-                   if (lines.size() != len)
-                       continue;
-                   /*for (int i = 0; i < len; i++) {
-                        System.out.print(lines.get(i) + " ");
+                   lists.put(socket.getRemoteSocketAddress(), lines);
+
+                   while (lines.size() > 0 && !ARGS.containsKey(lines.get(0))) {
+                       lines.remove(0);
                    }
-                   System.out.println();*/
+                    if (lines.size() == 0)
+                        continue;
+
+                   int len = ARGS.get(lines.get(0));
+                   if (lines.size() < len)
+                       continue;
+                    if (lines.get(0).equals("getstate"))
+                        System.out.println("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO");
+
                    input.add(new VREvent(new ArrayList<>(lines.subList(0, len)), socket, -1));
                    lines = lines.subList(len, lines.size());
                }
@@ -199,6 +219,7 @@ class VRCommunications {
         System.out.println("Send getView from " + Integer.toString(idx) + " to nodes "
                 + " about operations after: " + Integer.toString(operationNumber));
         List<String> args = new ArrayList<>();
+        args.add("getstate");
         args.add(Integer.toString(viewNumber));
         args.add(Integer.toString(operationNumber));
         args.add(Integer.toString(idx));

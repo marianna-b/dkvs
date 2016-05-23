@@ -36,6 +36,10 @@ class VRClient {
                 try {
 
                     String res = reader.readLine();
+                    if (res == null) {
+                        viewNumber++;;
+                        continue;
+                    }
                     if (res.equals("reply")) {
                         res = reader.readLine();
                         if (Integer.parseInt(reader.readLine()) == clientID) {

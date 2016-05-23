@@ -63,10 +63,12 @@ class VRCommunications {
                             event.send();
                             event = q.poll();
                         } catch (IOException ignored) {
+                            //noinspection EmptyCatchBlock
                             try {
                                 Thread.sleep(115);
                             } catch (InterruptedException ign) {}
                             event.socket = nodes.get(finalI1);
+                            //noinspection EmptyCatchBlock
                             try {
                                 event.send();
                             } catch (IOException ign2) {}
@@ -109,7 +111,7 @@ class VRCommunications {
                 }
                 try {
                     event.send();
-                } catch (IOException e) {}
+                } catch (IOException ignored) {}
             }
         }).start();
 
@@ -165,9 +167,7 @@ class VRCommunications {
                    input.add(new VREvent(new ArrayList<>(lines.subList(0, len)), socket, -1));
                    lines = lines.subList(len, lines.size());
                }
-           } catch (IOException e) {
-               e.printStackTrace();
-           }
+           } catch (IOException ignored) {}
        }).start();
    }
 

@@ -52,7 +52,7 @@ class VRLog {
     }
 
 
-    void addToList(int clientID, int requestNumber, String operation) {
+    private void addToList(int clientID, int requestNumber, String operation) {
         clientTable.put(clientID, requestNumber);
         clientResult.remove(clientID);
         list.add(new VRLogEntry(clientID, requestNumber, operation));
@@ -92,9 +92,8 @@ class VRLog {
             default:
                 res = "PONG";
         }
-
-        if (clientTable.get(list.get(i).clientID) == list.get(i).requestNumber)
-            clientResult.put(list.get(i).clientID, res);
+        clientTable.put(list.get(i).clientID, list.get(i).requestNumber);
+        clientResult.put(list.get(i).clientID, res);
         return res;
     }
 

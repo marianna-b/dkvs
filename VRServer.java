@@ -299,7 +299,6 @@ class VRServer {
             return;
         }
 
-        // TODO is ok?
         if (v % S.amount == i)
             S.resetAccessPrimary();
 
@@ -348,7 +347,6 @@ class VRServer {
             return;
         }
 
-        // TODO is ok?
         if (v % S.amount == i)
             S.resetAccessPrimary();
 

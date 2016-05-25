@@ -37,7 +37,7 @@ class VRClient {
 
                     String res = reader.readLine();
                     if (res == null) {
-                        viewNumber++;;
+                        viewNumber++;
                         continue;
                     }
                     if (res.equals("reply")) {

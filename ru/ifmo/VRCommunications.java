@@ -18,6 +18,7 @@ class VRCommunications {
     private int amount;
     private VRConfiguration conf;
 
+
     VRCommunications(VRConfiguration c, int idx) throws IOException {
         amount = c.n;
         conf = c;
@@ -33,9 +34,7 @@ class VRCommunications {
                     if (!lists.containsKey(addr))
                         lists.put(addr, new ArrayList<>());
                     messageProcessing(socket);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                } catch (IOException ignored) {}
             }
         }).start();
 
@@ -47,6 +46,7 @@ class VRCommunications {
             nodes.set(i, new Socket());
             if (i != idx) {
                 int finalI1 = i;
+                tryReconnect(finalI1);
 
                 new Thread(() -> {
                     ConcurrentLinkedQueue<VREvent> q = socketOut.get(finalI1);
@@ -56,6 +56,7 @@ class VRCommunications {
                             try {
                                 Thread.sleep(5);
                             } catch (InterruptedException ignored) {}
+                            tryReconnect(finalI1);
                             event = q.poll();
                             continue;
                         }
@@ -64,9 +65,7 @@ class VRCommunications {
                             event = q.poll();
                         } catch (IOException ignored) {
                             //noinspection EmptyCatchBlock
-                            try {
-                                Thread.sleep(115);
-                            } catch (InterruptedException ign) {}
+                            tryReconnect(finalI1);
                             event.socket = nodes.get(finalI1);
                             //noinspection EmptyCatchBlock
                             try {
@@ -77,22 +76,6 @@ class VRCommunications {
                     }
                 }).start();
 
-
-                int finalI = i;
-                new Thread(() -> {
-                    while (true) {
-                        try {
-                            Socket tmp = nodes.getAndSet(finalI, new Socket());
-                            if (tmp != null)
-                                tmp.close();
-                            nodes.get(finalI).connect(new InetSocketAddress(InetAddress.getByName(conf.address[finalI1]),
-                                    conf.port[finalI1]), 50);
-                        } catch (IOException ignored) {}
-                        try {
-                            Thread.sleep(10);
-                        } catch (InterruptedException ignored) {}
-                    }
-                }).start();
             }
         }
 
@@ -161,15 +144,34 @@ class VRCommunications {
                    int len = ARGS.get(lines.get(0));
                    if (lines.size() < len)
                        continue;
-                    if (lines.get(0).equals("getstate"))
-                        System.out.println("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO");
 
                    input.add(new VREvent(new ArrayList<>(lines.subList(0, len)), socket, -1));
                    lines = lines.subList(len, lines.size());
                }
-           } catch (IOException ignored) {}
+           } catch (IOException ignored) {
+               try {
+                   socket.close();
+               } catch (IOException ignored2) {}
+           }
        }).start();
    }
+
+
+    private void tryReconnect(int i) {
+        try {
+            Thread.sleep(130);
+        } catch (InterruptedException ignored) {
+        }
+        try {
+            Socket tmp = nodes.getAndSet(i, new Socket());
+            if (tmp != null) {
+                tmp.close();
+            }
+            nodes.get(i).connect(new InetSocketAddress(InetAddress.getByName(conf.address[i]),
+                    conf.port[i]), 50);
+        } catch (IOException ignored) {
+        }
+    }
 
     void sendPrepareOK(int viewNumber, int operationNumber, int idx, int primary) {
         System.out.println("Send prepareOK from " + Integer.toString(idx) + " to primary " + Integer.toString(primary) +
@@ -230,9 +232,9 @@ class VRCommunications {
         }
     }
     /*
-    VREvent waitForType(String type) {
+    ru.ifmo.VREvent waitForType(String type) {
         System.out.println("Wait for " + type + " message");
-        VREvent res;
+        ru.ifmo.VREvent res;
         while ((res = input.poll()) == null || !res.type.equals(type)) {
             if (res != null)
                 delayed.add(res);
